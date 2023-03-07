@@ -234,6 +234,12 @@ pub fn handle_request(log: &Logger, request: &protocol::Request) -> Result<Vec<u
                 ..AddrInfoHints::default()
             };
 
+            debug!(log, "gethostbynamev6 request:"; "hostname" => %hostname);
+            for addr in getaddrinfo(Some(hostname), None, Some(hints)).unwrap() {
+                let uaddr = addr.unwrap();
+                let canon = uaddr.canonname.unwrap_or("None".to_string());
+                debug!(log, "gethostbynamev6 response:"; "resp" => %canon);
+            }
             let host = match getaddrinfo(Some(hostname), None, Some(hints)).map(|addrs| {
                 addrs
                     .filter_map(|r| r.ok())
