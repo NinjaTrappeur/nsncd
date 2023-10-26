@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-use std::collections::HashSet;
 use std::convert::TryInto;
 use std::ffi::{CStr, CString};
 use std::net::IpAddr;
@@ -22,6 +21,8 @@ use std::os::unix::ffi::OsStrExt;
 
 use anyhow::{bail, Context, Result};
 use atoi::atoi;
+use dns_lookup::AddrInfoHints;
+use nix::libc::{AI_CANONNAME, SOCK_STREAM};
 use nix::sys::socket::AddressFamily;
 use nix::unistd::{getgrouplist, Gid, Group, Uid, User};
 use slog::{debug, error, Logger};
@@ -144,22 +145,46 @@ pub fn handle_request(
 
         RequestType::GETAI => {
             let hostname = CStr::from_bytes_with_nul(request.key)?.to_str()?;
-            let resp = dns_lookup::getaddrinfo(Some(hostname), None, None);
-
+            // Boths hints are necessary to mimick the glibc behaviour.
+            let hints = AddrInfoHints {
+                // The canonical name will be filled in the first
+                // addrinfo struct returned by getaddrinfo.
+                flags: AI_CANONNAME,
+                // Deduplicate the resulting addrs.
+                socktype: SOCK_STREAM,
+                address: 0,
+                protocol: 0,
+            };
+            let resp = dns_lookup::getaddrinfo(Some(hostname), None, Some(hints));
             let ai_resp_empty = AiResponse {
                 canon_name: hostname.to_string(),
                 addrs: vec![],
             };
-
             let ai_resp: AiResponse = match resp {
                 Ok(ai_resp_iter) => {
-                    let addrs: HashSet<IpAddr> = ai_resp_iter
+                    let name_and_addrs: Vec<(Option<String>, IpAddr)> = ai_resp_iter
                         .filter_map(|e| e.ok())
-                        .map(|e| e.sockaddr.ip())
+                        .map(|e| (e.canonname, e.sockaddr.ip()))
                         .collect();
+                    // According to man 3 getaddrinfo, the resulting
+                    // canonical name should be stored in the first
+                    // addrinfo struct.
+                    // Re-using the request hostname if we don't get a
+                    // canonical name.
+                    let canon_name = if !name_and_addrs.is_empty() {
+                        let elem = name_and_addrs[0].clone();
+                        elem.0.unwrap_or(hostname.to_string())
+                    } else {
+                        hostname.to_string()
+                    };
+                    // De-duplicating the resulting addresses.
+                    let addrs: Vec<IpAddr> = name_and_addrs.clone()
+                            .into_iter()
+                            .map(|(_, addr)| addr)
+                            .collect();
                     AiResponse {
-                        canon_name: hostname.to_string(),
-                        addrs: addrs.iter().copied().collect::<Vec<IpAddr>>(),
+                        canon_name,
+                        addrs,
                     }
                 }
                 Err(_) => ai_resp_empty,
