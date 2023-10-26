@@ -52,6 +52,7 @@ pub fn handle_request(
         return Ok(vec![]);
     }
     debug!(log, "handling request"; "request" => ?request);
+    dbg!(request.ty);
     match request.ty {
         RequestType::GETPWBYUID => {
             let key = CStr::from_bytes_with_nul(request.key)?;
@@ -163,8 +164,9 @@ pub fn handle_request(
                 }
                 Err(_) => ai_resp_empty,
             };
+            dbg!(&ai_resp);
 
-            serialize_address_info(&ai_resp)
+            dbg!(serialize_address_info(&ai_resp))
         }
 
         // GETHOSTBYADDR and GETHOSTBYADDRv6 implement reverse lookup
@@ -187,7 +189,8 @@ pub fn handle_request(
                     bail!("unexpected gethostbyaddr error: {}", e)
                 }
             };
-            hostent.serialize()
+            dbg!(&hostent);
+            dbg!(hostent.serialize())
         }
         RequestType::GETHOSTBYADDRv6 => {
             let key = request.key;
@@ -207,7 +210,8 @@ pub fn handle_request(
                     bail!("unexpected gethostbyaddrv6 error: {}", e)
                 }
             };
-            hostent.serialize()
+            dbg!(&hostent);
+            dbg!(hostent.serialize())
         }
 
         RequestType::GETHOSTBYNAME => {
@@ -223,7 +227,8 @@ pub fn handle_request(
                     bail!("unexpected gethostbyname error: {:?}", e)
                 }
             };
-            hostent.serialize()
+            dbg!(&hostent);
+            dbg!(hostent.serialize())
         }
 
         RequestType::GETHOSTBYNAMEv6 => {
@@ -239,7 +244,8 @@ pub fn handle_request(
                     bail!("unexpected gethostbynamev6 error: {:?}", e)
                 }
             };
-            hostent.serialize()
+            dbg!(&hostent);
+            dbg!(hostent.serialize())
         }
 
         // These will normally send an FD pointing to the internal cache structure,
